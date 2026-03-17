@@ -13,7 +13,7 @@
             // 這是 FHIR Server 的 Base URL (Auth URL 拿掉 /auth/authorize)
             iss: "https://thas.mohw.gov.tw/v/r4/sim/WzIsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0",
             clientId: "test-client", 
-            scope: "launch/patient patient/*.read openid fhirUser",
+            scope: "user/*.read openid fhirUser",
             // 授權成功後，要跳轉回來的網頁名稱
             redirectUri: "index.html" 
         });

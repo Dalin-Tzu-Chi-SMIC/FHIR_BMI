@@ -2,76 +2,129 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>SMART on FHIR - BMI 計算機</title>
+    <title>SMART on FHIR - 組織病人 BMI 計算機</title>
     <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
-        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; max-width: 400px; }
-        .highlight { color: #2c3e50; font-weight: bold; font-size: 1.2em; }
+        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; max-width: 500px; }
+        .highlight { color: #2c3e50; font-weight: bold; font-size: 1.2em; margin-top: 15px; }
+        select, button { padding: 8px; font-size: 16px; margin-top: 10px; width: 100%; box-sizing: border-box;}
+        button { background-color: #4CAF50; color: white; border: none; cursor: pointer; margin-bottom: 15px;}
+        button:hover { background-color: #45a049; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>🏥 醫療 BMI 系統 (機構代碼: 669597)</h2>
         <hr>
-        <div id="patient-info">⏳ 正在讀取病人資料...</div>
-        <div id="vitals">⏳ 正在搜尋身高與體重紀錄...</div>
-        <br>
+        
+        <div id="selection-area">
+            <label for="patient-select"><b>請選擇要查看的病人：</b></label>
+            <select id="patient-select">
+                <option value="">⏳ 正在載入病人清單...</option>
+            </select>
+            <button id="calc-btn" disabled>取得資料並計算 BMI</button>
+        </div>
+
+        <hr>
+        <div id="vitals">請先選擇病人並點擊計算。</div>
         <div class="highlight" id="bmi-result"></div>
     </div>
 
     <script>
-        // ready() 會自動處理 URL 上的 code，並去後台換取 Token
         FHIR.oauth2.ready().then(function(client) {
             
-            // 1. 取得病人基本資料 (利用剛剛授權綁定的 Patient ID)
-            client.patient.read().then(function(pt) {
-                var name = pt.name[0].text || (pt.name[0].given.join(" ") + " " + pt.name[0].family);
-                document.getElementById("patient-info").innerText = "👤 病人姓名: " + name;
+            const selectElement = document.getElementById("patient-select");
+            const calcBtn = document.getElementById("calc-btn");
+
+            // 1. 根據您的組織代碼 669597 查詢所有病人
+            client.request("Patient?organization=669597").then(function(bundle) {
+                // 清空預設選項
+                selectElement.innerHTML = '<option value="">-- 請選擇病人 --</option>';
+                
+                if (bundle.entry && bundle.entry.length > 0) {
+                    // 迴圈處理每一位查到的病人
+                    bundle.entry.forEach(function(entry) {
+                        let pt = entry.resource;
+                        // 解析病人姓名 (處理 FHIR 姓名結構可能缺少某些欄位的狀況)
+                        let name = "未知姓名";
+                        if (pt.name && pt.name[0]) {
+                            name = pt.name[0].text || 
+                                   ((pt.name[0].family || "") + " " + (pt.name[0].given ? pt.name[0].given.join(" ") : "")).trim();
+                        }
+                        
+                        // 建立下拉選單的選項
+                        let option = document.createElement("option");
+                        option.value = pt.id; // 將 Value 設為病人的 ID
+                        option.text = `${name} (ID: ${pt.id})`;
+                        selectElement.appendChild(option);
+                    });
+                    // 啟用按鈕
+                    calcBtn.disabled = false;
+                } else {
+                    selectElement.innerHTML = '<option value="">❌ 該組織下找不到任何病人</option>';
+                }
+            }).catch(function(error) {
+                console.error("查詢病人清單失敗:", error);
+                selectElement.innerHTML = '<option value="">❌ 讀取清單發生錯誤</option>';
             });
 
-            // 2. 準備查詢條件：身高 (LOINC代碼: 8302-2) 與 體重 (LOINC代碼: 29463-7)
-            var heightQuery = new URLSearchParams({ code: "8302-2", subject: client.patient.id });
-            var weightQuery = new URLSearchParams({ code: "29463-7", subject: client.patient.id });
-
-            // 3. 同時發送兩個請求去 FHIR Server 抓 Observation (觀察數據) 資源
-            Promise.all([
-                client.request("Observation?" + heightQuery),
-                client.request("Observation?" + weightQuery)
-            ]).then(function(responses) {
-                var heightBundle = responses[0];
-                var weightBundle = responses[1];
-                var height = null, weight = null;
-
-                // 從 Bundle 解析出身高 (假設預設單位為 cm)
-                if (heightBundle.entry && heightBundle.entry.length > 0) {
-                    height = heightBundle.entry[0].resource.valueQuantity.value;
-                }
-                // 從 Bundle 解析出體重 (假設預設單位為 kg)
-                if (weightBundle.entry && weightBundle.entry.length > 0) {
-                    weight = weightBundle.entry[0].resource.valueQuantity.value;
+            // 2. 當點擊「計算」按鈕時執行的邏輯
+            calcBtn.addEventListener("click", function() {
+                const selectedPatientId = selectElement.value;
+                
+                if (!selectedPatientId) {
+                    alert("請先從下拉選單選擇一位病人！");
+                    return;
                 }
 
-                // 4. 計算 BMI
-                if (height && weight) {
-                    document.getElementById("vitals").innerText = `📏 身高: ${height} cm \n ⚖️ 體重: ${weight} kg`;
-                    
-                    var heightInMeters = height / 100;
-                    var bmi = weight / (heightInMeters * heightInMeters);
-                    
-                    document.getElementById("bmi-result").innerText = "💡 BMI 計算結果: " + bmi.toFixed(2);
-                } else {
-                    document.getElementById("vitals").innerText = "⚠️ 找不到這位病人的身高或體重紀錄，無法計算 BMI。";
-                }
-            }).catch(function(error){
-                console.error("讀取生命徵象失敗:", error);
-                document.getElementById("vitals").innerText = "❌ 讀取資料發生錯誤。";
+                // 更新畫面狀態
+                document.getElementById("vitals").innerText = "⏳ 正在搜尋身高與體重紀錄...";
+                document.getElementById("bmi-result").innerText = "";
+
+                // 準備查詢條件，Subject 換成下拉選單選到的病人 ID
+                // FHIR 標準中，Subject 通常帶入 "Patient/[ID]"
+                const heightQuery = new URLSearchParams({ code: "8302-2", subject: `Patient/${selectedPatientId}` });
+                const weightQuery = new URLSearchParams({ code: "29463-7", subject: `Patient/${selectedPatientId}` });
+
+                // 同時發送兩個請求去 FHIR Server 抓 Observation 資源
+                Promise.all([
+                    client.request("Observation?" + heightQuery),
+                    client.request("Observation?" + weightQuery)
+                ]).then(function(responses) {
+                    const heightBundle = responses[0];
+                    const weightBundle = responses[1];
+                    let height = null, weight = null;
+
+                    // 從 Bundle 解析資料
+                    if (heightBundle.entry && heightBundle.entry.length > 0) {
+                        height = heightBundle.entry[0].resource.valueQuantity.value;
+                    }
+                    if (weightBundle.entry && weightBundle.entry.length > 0) {
+                        weight = weightBundle.entry[0].resource.valueQuantity.value;
+                    }
+
+                    // 進行計算
+                    if (height && weight) {
+                        document.getElementById("vitals").innerText = `📏 身高: ${height} cm \n ⚖️ 體重: ${weight} kg`;
+                        
+                        // 計算 BMI (體重 / 身高的平方，身高需換算為公尺)
+                        const heightInMeters = height / 100;
+                        const bmi = weight / Math.pow(heightInMeters, 2);
+                        
+                        document.getElementById("bmi-result").innerText = "💡 BMI 計算結果: " + bmi.toFixed(2);
+                    } else {
+                        document.getElementById("vitals").innerText = "⚠️ 找不到這位病人的身高或體重紀錄，無法計算 BMI。";
+                    }
+                }).catch(function(error){
+                    console.error("讀取生命徵象失敗:", error);
+                    document.getElementById("vitals").innerText = "❌ 讀取資料發生錯誤。";
+                });
             });
 
         }).catch(function(error) {
             console.error("授權失敗或尚未授權:", error);
-            document.getElementById("patient-info").innerText = "請先從 launch.html 啟動應用程式！";
-            document.getElementById("vitals").innerText = "";
+            document.getElementById("selection-area").innerHTML = "<p style='color:red;'>請先從首頁啟動應用程式並完成授權！</p>";
         });
     </script>
 </body>
