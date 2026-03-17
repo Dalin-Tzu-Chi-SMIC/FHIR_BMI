@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>啟動 BMI App</title>
+    <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
+</head>
+<body>
+    <h2>正在連接至 FHIR 授權伺服器...</h2>
+    <script>
+        // 設定 OAuth 2.0 授權參數 (對應您在 Postman 填寫的內容)
+        FHIR.oauth2.authorize({
+            // 這是 FHIR Server 的 Base URL (Auth URL 拿掉 /auth/authorize)
+            iss: "https://thas.mohw.gov.tw/v/r4/sim/WzIsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0",
+            clientId: "test-client", 
+            scope: "launch/patient patient/*.read openid fhirUser",
+            // 授權成功後，要跳轉回來的網頁名稱
+            redirectUri: "app.html" 
+        });
+    </script>
+</body>
+</html>

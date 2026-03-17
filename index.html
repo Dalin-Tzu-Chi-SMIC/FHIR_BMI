@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>SMART on FHIR - BMI 計算機</title>
+    <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
+        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; max-width: 400px; }
+        .highlight { color: #2c3e50; font-weight: bold; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🏥 醫療 BMI 系統 (機構代碼: 669597)</h2>
+        <hr>
+        <div id="patient-info">⏳ 正在讀取病人資料...</div>
+        <div id="vitals">⏳ 正在搜尋身高與體重紀錄...</div>
+        <br>
+        <div class="highlight" id="bmi-result"></div>
+    </div>
+
+    <script>
+        // ready() 會自動處理 URL 上的 code，並去後台換取 Token
+        FHIR.oauth2.ready().then(function(client) {
+            
+            // 1. 取得病人基本資料 (利用剛剛授權綁定的 Patient ID)
+            client.patient.read().then(function(pt) {
+                var name = pt.name[0].text || (pt.name[0].given.join(" ") + " " + pt.name[0].family);
+                document.getElementById("patient-info").innerText = "👤 病人姓名: " + name;
+            });
+
+            // 2. 準備查詢條件：身高 (LOINC代碼: 8302-2) 與 體重 (LOINC代碼: 29463-7)
+            var heightQuery = new URLSearchParams({ code: "8302-2", subject: client.patient.id });
+            var weightQuery = new URLSearchParams({ code: "29463-7", subject: client.patient.id });
+
+            // 3. 同時發送兩個請求去 FHIR Server 抓 Observation (觀察數據) 資源
+            Promise.all([
+                client.request("Observation?" + heightQuery),
+                client.request("Observation?" + weightQuery)
+            ]).then(function(responses) {
+                var heightBundle = responses[0];
+                var weightBundle = responses[1];
+                var height = null, weight = null;
+
+                // 從 Bundle 解析出身高 (假設預設單位為 cm)
+                if (heightBundle.entry && heightBundle.entry.length > 0) {
+                    height = heightBundle.entry[0].resource.valueQuantity.value;
+                }
+                // 從 Bundle 解析出體重 (假設預設單位為 kg)
+                if (weightBundle.entry && weightBundle.entry.length > 0) {
+                    weight = weightBundle.entry[0].resource.valueQuantity.value;
+                }
+
+                // 4. 計算 BMI
+                if (height && weight) {
+                    document.getElementById("vitals").innerText = `📏 身高: ${height} cm \n ⚖️ 體重: ${weight} kg`;
+                    
+                    var heightInMeters = height / 100;
+                    var bmi = weight / (heightInMeters * heightInMeters);
+                    
+                    document.getElementById("bmi-result").innerText = "💡 BMI 計算結果: " + bmi.toFixed(2);
+                } else {
+                    document.getElementById("vitals").innerText = "⚠️ 找不到這位病人的身高或體重紀錄，無法計算 BMI。";
+                }
+            }).catch(function(error){
+                console.error("讀取生命徵象失敗:", error);
+                document.getElementById("vitals").innerText = "❌ 讀取資料發生錯誤。";
+            });
+
+        }).catch(function(error) {
+            console.error("授權失敗或尚未授權:", error);
+            document.getElementById("patient-info").innerText = "請先從 launch.html 啟動應用程式！";
+            document.getElementById("vitals").innerText = "";
+        });
+    </script>
+</body>
+</html>
