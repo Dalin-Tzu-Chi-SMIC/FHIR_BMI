@@ -6,16 +6,22 @@
     <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
 </head>
 <body>
-    <h2>正在連接至 FHIR 授權伺服器...</h2>
+    <h2>正在連接至本地授權伺服器 (Keycloak)...</h2>
     <script>
-        // 設定 OAuth 2.0 授權參數 (對應您在 Postman 填寫的內容)
         FHIR.oauth2.authorize({
-            // 這是 FHIR Server 的 Base URL (Auth URL 拿掉 /auth/authorize)
-            iss: "https://thas.mohw.gov.tw/v/r4/sim/WzIsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMSwiIl0",
+            // 1. 指向您本地端的 HAPI FHIR Server
+            iss: "http://DL1C310PC1:8080/fhir",
+            
+            // 2. 剛剛在 Keycloak 設定的 Client ID
             clientId: "test-client", 
             scope: "user/*.read openid fhirUser",
-            // 授權成功後，要跳轉回來的網頁名稱
-            redirectUri: "index.html" 
+            
+            // 3. 授權成功後跳轉的主程式
+            redirectUri: "index.html",
+            
+            // 4. 強制指定使用本地端 Keycloak 作為授權與換發 Token 的中心
+            authorizeUri: "http://localhost:8081/realms/fhir/protocol/openid-connect/auth",
+            tokenUri: "http://localhost:8081/realms/fhir/protocol/openid-connect/token"
         });
     </script>
 </body>
